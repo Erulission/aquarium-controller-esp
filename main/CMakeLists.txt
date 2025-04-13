@@ -1,0 +1,4 @@
+idf_component_register(SRCS "main.c"
+                    PRIV_REQUIRES spi_flash pca9685
+                    INCLUDE_DIRS "."
+                    REQUIRES unity)
