@@ -10,15 +10,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_chip_info.h"
-
 #include "freertos/event_groups.h"
-
-#include <stdio.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <pca9685.h>
 #include <string.h>
 #include <esp_log.h>
+#include "led_controller.h"
+#include "led_driver_pca9685.h"
 
 #define ADDR PCA9685_ADDR_BASE
 #ifndef APP_CPU_NUM
@@ -29,43 +25,82 @@
 #define CONFIG_EXAMPLE_I2C_MASTER_SCL 22
 #define CONFIG_EXAMPLE_PWM_FREQ_HZ 1000
 
-static const char *TAG = "pca9685_test";
+static const char *TAG = "led_example";
 
-void pca9685_test(void *pvParameters)
+static void led_control_task(void* pvParameters)
 {
-    i2c_dev_t dev;
-    memset(&dev, 0, sizeof(i2c_dev_t));
+    // Wait for initialization to complete
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    
+    ESP_LOGI(TAG, "LED control task started");
 
-    ESP_ERROR_CHECK(pca9685_init_desc(&dev, ADDR, 0, CONFIG_EXAMPLE_I2C_MASTER_SDA, CONFIG_EXAMPLE_I2C_MASTER_SCL));
-    ESP_ERROR_CHECK(pca9685_init(&dev));
-
-    ESP_ERROR_CHECK(pca9685_restart(&dev));
-
-    uint16_t freq;
-    ESP_ERROR_CHECK(pca9685_set_pwm_frequency(&dev, CONFIG_EXAMPLE_PWM_FREQ_HZ));
-    ESP_ERROR_CHECK(pca9685_get_pwm_frequency(&dev, &freq));
-
-    ESP_LOGI(TAG, "Freq %dHz, real %d", CONFIG_EXAMPLE_PWM_FREQ_HZ, freq);
-
-
+    // Demonstrate setting different brightness levels
     while (1) {
-        uint16_t led1_val = PCA9685_MAX_PWM_VALUE;
-
+        // Fade all channels up
         for (int i = 0; i < 15; i++) {
-            ESP_ERROR_CHECK(pca9685_set_pwm_value(&dev, i, led1_val));
+            led_controller_set_brightness(i, 0);
         }
         
-        ESP_ERROR_CHECK(pca9685_set_pwm_value(&dev, 0, 0)); // BLUE
-        ESP_ERROR_CHECK(pca9685_set_pwm_value(&dev, 1, led1_val)); // GREEN
-        ESP_ERROR_CHECK(pca9685_set_pwm_value(&dev, 2, led1_val)); // RED
+        // Special RGB pattern
+        ESP_LOGI(TAG, "Setting RGB pattern");
+        led_controller_set_brightness(0, 100);
+        led_controller_set_brightness(3, 100); 
+        led_controller_set_brightness(6, 100);
+        
+        vTaskDelay(pdMS_TO_TICKS(3000));
+        
+        // Turn all channels off
+        ESP_LOGI(TAG, "Turning all channels off");
+        for (int i = 0; i < 15; i++) {
+            led_controller_set_brightness(i, 0);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(2000));
 
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        ESP_LOGI(TAG, "Color 2");
+        led_controller_set_brightness(1, 100);
+        led_controller_set_brightness(4, 100); 
+        led_controller_set_brightness(7, 100);
+
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        ESP_LOGI(TAG, "Color 3");
+        for (int i = 0; i < 15; i++) {
+            led_controller_set_brightness(i, 0);
+        }
+
+        led_controller_set_brightness(2, 100);
+        led_controller_set_brightness(5, 100); 
+        led_controller_set_brightness(8, 100);
+
+        vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
 
 void app_main(void) {
-     // Init i2cdev library
-     ESP_ERROR_CHECK(i2cdev_init());
+    // Initialize i2cdev library
+    ESP_ERROR_CHECK(i2cdev_init());
+    
+    // Initialize the LED controller
+    ESP_LOGI(TAG, "Initializing LED controller");
+    ESP_ERROR_CHECK(led_controller_init());
 
-     xTaskCreatePinnedToCore(pca9685_test, TAG, configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL, APP_CPU_NUM);
+    led_driver_pca9685_init(
+        CONFIG_EXAMPLE_I2C_MASTER_SDA,
+        CONFIG_EXAMPLE_I2C_MASTER_SCL,
+        ADDR,
+        CONFIG_EXAMPLE_PWM_FREQ_HZ, true
+    );
+        
+    // Create the LED control task
+    ESP_LOGI(TAG, "Creating LED control task");
+    xTaskCreatePinnedToCore(
+        led_control_task,
+        "led_control",
+        configMINIMAL_STACK_SIZE * 3,
+        NULL,
+        5,
+        NULL,
+        APP_CPU_NUM
+    );
 }
